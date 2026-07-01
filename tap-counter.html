@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Tap Counter</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0c0c0f;
+    --surface: #13131a;
+    --border: #1e1e2e;
+    --accent: #7effa0;
+    --accent-dim: rgba(126,255,160,0.12);
+    --accent-glow: rgba(126,255,160,0.35);
+    --text: #e8e8f0;
+    --muted: #555570;
+    --danger: #ff6b6b;
+    --ring-size: min(72vw, 340px);
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  /* ── SETUP SCREEN ─────────────────────────────── */
+  #setup {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 0;
+    padding: 32px 24px;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+
+  #setup.hide {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-24px);
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 48px;
+  }
+
+  .setup-label {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .number-picker {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 48px;
+  }
+
+  .picker-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s, background 0.2s, transform 0.1s;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .picker-btn:active { transform: scale(0.88); }
+  .picker-btn:hover { border-color: var(--accent); background: var(--accent-dim); }
+
+  #target-display {
+    font-family: 'Syne', sans-serif;
+    font-size: 72px;
+    font-weight: 800;
+    color: var(--text);
+    min-width: 120px;
+    text-align: center;
+    line-height: 1;
+  }
+
+  .start-btn {
+    width: 100%;
+    max-width: 280px;
+    height: 54px;
+    border-radius: 27px;
+    border: none;
+    background: var(--accent);
+    color: #050a07;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s;
+    box-shadow: 0 0 28px var(--accent-glow);
+  }
+
+  .start-btn:hover { box-shadow: 0 0 44px var(--accent-glow); }
+  .start-btn:active { transform: scale(0.95); }
+
+  /* ── COUNTER SCREEN ────────────────────────────── */
+  #counter {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.96);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+
+  #counter.show {
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1);
+  }
+
+  /* tap zone = entire screen */
+  #tap-zone {
+    position: fixed;
+    inset: 0;
+    cursor: pointer;
+    z-index: 1;
+  }
+
+  /* ring */
+  .ring-wrap {
+    position: relative;
+    width: var(--ring-size);
+    height: var(--ring-size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .ring-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+
+  .ring-track {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 3;
+  }
+
+  .ring-progress {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.35s cubic-bezier(0.4,0,0.2,1),
+                stroke 0.3s ease;
+    filter: drop-shadow(0 0 6px var(--accent-glow));
+  }
+
+  .ring-progress.depleted { stroke: var(--danger); filter: drop-shadow(0 0 6px rgba(255,107,107,0.5)); }
+
+  /* number */
+  #count-display {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(72px, 22vw, 120px);
+    font-weight: 800;
+    line-height: 1;
+    color: var(--text);
+    transition: color 0.3s, transform 0.08s;
+    text-align: center;
+  }
+
+  #count-display.pulse {
+    animation: countPulse 0.18s ease;
+  }
+
+  @keyframes countPulse {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(0.88); }
+    100% { transform: scale(1); }
+  }
+
+  .count-sub {
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 10px;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  /* done state */
+  #done-msg {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  #done-msg.show {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .done-icon {
+    font-size: 48px;
+    animation: popIn 0.4s cubic-bezier(0.175,0.885,0.32,1.275) both;
+  }
+
+  @keyframes popIn {
+    from { transform: scale(0); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  .done-text {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+  }
+
+  .done-sub {
+    font-size: 12px;
+    color: var(--muted);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  /* bottom bar */
+  .bottom-bar {
+    position: fixed;
+    bottom: env(safe-area-inset-bottom, 0);
+    left: 0; right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 32px 28px;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .bottom-bar button {
+    pointer-events: auto;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 10px 20px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, transform 0.1s;
+  }
+
+  .bottom-bar button:hover { border-color: var(--text); color: var(--text); }
+  .bottom-bar button:active { transform: scale(0.93); }
+
+  .progress-label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+
+  /* ripple */
+  .ripple {
+    position: fixed;
+    border-radius: 50%;
+    background: rgba(126,255,160,0.15);
+    transform: scale(0);
+    animation: rippleOut 0.55s ease forwards;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  @keyframes rippleOut {
+    to { transform: scale(6); opacity: 0; }
+  }
+
+  /* grid bg */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: 0.4;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body > * { position: relative; z-index: 1; }
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="setup">
+  <p class="logo">Tap Counter</p>
+  <p class="setup-label">Set target taps</p>
+  <div class="number-picker">
+    <button class="picker-btn" id="dec-btn">−</button>
+    <div id="target-display">20</div>
+    <button class="picker-btn" id="inc-btn">+</button>
+  </div>
+  <button class="start-btn" id="start-btn">Start</button>
+</div>
+
+<!-- COUNTER -->
+<div id="counter">
+  <div id="tap-zone"></div>
+
+  <div class="ring-wrap">
+    <svg class="ring-svg" viewBox="0 0 100 100">
+      <circle class="ring-track" cx="50" cy="50" r="46"/>
+      <circle class="ring-progress" id="ring" cx="50" cy="50" r="46"/>
+    </svg>
+    <div style="display:flex;flex-direction:column;align-items:center;">
+      <div id="count-display">20</div>
+      <p class="count-sub" id="count-sub">taps remaining</p>
+    </div>
+  </div>
+
+  <!-- done overlay -->
+  <div id="done-msg">
+    <div class="done-icon">✓</div>
+    <div class="done-text">Completed!</div>
+    <div class="done-sub" id="done-sub">20 taps done</div>
+  </div>
+</div>
+
+<!-- BOTTOM BAR (only shown during counter) -->
+<div class="bottom-bar" id="bottom-bar" style="display:none;">
+  <button id="reset-btn">↺ Reset</button>
+  <span class="progress-label" id="progress-label">0 / 20</span>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+
+  let target = 20;
+  let remaining = 20;
+  let done = false;
+
+  const circumference = 2 * Math.PI * 46; // r=46
+  $('ring').style.strokeDasharray = circumference;
+
+  // ── Setup ──
+  $('dec-btn').addEventListener('click', () => {
+    target = Math.max(1, target - 1);
+    $('target-display').textContent = target;
+  });
+
+  $('inc-btn').addEventListener('click', () => {
+    target = Math.min(9999, target + 1);
+    $('target-display').textContent = target;
+  });
+
+  $('start-btn').addEventListener('click', () => {
+    remaining = target;
+    done = false;
+    updateUI();
+    $('setup').classList.add('hide');
+    setTimeout(() => {
+      $('setup').style.display = 'none';
+      $('counter').classList.add('show');
+      $('bottom-bar').style.display = 'flex';
+    }, 380);
+  });
+
+  // ── Tap zone ──
+  $('tap-zone').addEventListener('pointerdown', e => {
+    if (done) return;
+    spawnRipple(e.clientX, e.clientY);
+    vibrate();
+    remaining = Math.max(0, remaining - 1);
+    updateUI();
+    if (remaining === 0) triggerDone();
+  });
+
+  // ── Reset ──
+  $('reset-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    $('counter').classList.remove('show');
+    $('bottom-bar').style.display = 'none';
+    $('done-msg').classList.remove('show');
+    $('count-display').style.opacity = '1';
+    $('count-sub').style.opacity = '1';
+    setTimeout(() => {
+      $('setup').style.display = 'flex';
+      requestAnimationFrame(() => $('setup').classList.remove('hide'));
+    }, 400);
+  });
+
+  // ── UI update ──
+  function updateUI() {
+    $('count-display').textContent = remaining;
+    const progress = 1 - remaining / target;
+    const offset = circumference * (1 - (remaining / target));
+    $('ring').style.strokeDashoffset = offset;
+
+    const tappedSoFar = target - remaining;
+    $('progress-label').textContent = `${tappedSoFar} / ${target}`;
+
+    // colour shift near end
+    if (remaining <= Math.ceil(target * 0.2) && remaining > 0) {
+      $('ring').classList.add('depleted');
+      $('count-display').style.color = 'var(--danger)';
+    } else {
+      $('ring').classList.remove('depleted');
+      $('count-display').style.color = 'var(--text)';
+    }
+
+    // pulse
+    const el = $('count-display');
+    el.classList.remove('pulse');
+    void el.offsetWidth;
+    el.classList.add('pulse');
+  }
+
+  function triggerDone() {
+    done = true;
+    $('ring').style.strokeDashoffset = 0;
+    $('ring').classList.remove('depleted');
+    $('ring').style.stroke = 'var(--accent)';
+
+    $('count-display').style.opacity = '0';
+    $('count-sub').style.opacity = '0';
+
+    $('done-sub').textContent = `${target} tap${target !== 1 ? 's' : ''} done`;
+    setTimeout(() => $('done-msg').classList.add('show'), 100);
+    vibrate(true);
+  }
+
+  // ── Ripple ──
+  function spawnRipple(x, y) {
+    const size = 80;
+    const el = document.createElement('div');
+    el.className = 'ripple';
+    el.style.cssText = `width:${size}px;height:${size}px;left:${x - size/2}px;top:${y - size/2}px;`;
+    document.body.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  }
+
+  // ── Vibration ──
+  function vibrate(success = false) {
+    if (!navigator.vibrate) return;
+    success ? navigator.vibrate([40, 60, 80]) : navigator.vibrate(18);
+  }
+</script>
+</body>
+</html>
